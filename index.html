@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수원 ⇄ 부산 1박 2일 여행 매거진 & 스마트 지도</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8'
+            },
+            coral: {
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#ea580c'
+            },
+            deepsea: '#0f172a'
+          },
+          fontFamily: {
+            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet (오픈소스 지도 - API Key 필요 없음) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Leaflet Marker Styling */
+    .pin-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      border: 2px solid #ffffff;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .pin-badge:hover {
+      transform: rotate(-45deg) scale(1.15);
+      z-index: 9999 !important;
+    }
+    .pin-badge span {
+      transform: rotate(45deg);
+      font-weight: 800;
+      font-size: 13px;
+      color: white;
+    }
+    .pin-day1 {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    }
+    .pin-day2 {
+      background: linear-gradient(135deg, #ea580c, #c2410c);
+    }
+
+    /* Floating Panel Animation */
+    #map-floating-drawer {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+    }
+    #map-floating-drawer.drawer-closed {
+      transform: translateX(-110%);
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* Popup Styling */
+    .leaflet-popup-content-wrapper {
+      padding: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    .leaflet-popup-content {
+      margin: 0 !important;
+      line-height: 1.5;
+    }
+    .leaflet-popup-close-button {
+      top: 10px !important;
+      right: 10px !important;
+      color: white !important;
+      background: rgba(0, 0, 0, 0.4) !important;
+      border-radius: 50%;
+      width: 24px !important;
+      height: 24px !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+
+    /* Print optimization for guidebook mode */
+    @media print {
+      header, #view-switcher, .no-print {
+        display: none !important;
+      }
+      #magazine-view {
+        display: block !important;
+      }
+      #map-view-container {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen flex flex-col font-sans overflow-hidden">
+
+  <!-- Main Navigation Header -->
+  <header class="bg-white border-b border-slate-200 z-30 px-4 py-2.5 flex items-center justify-between shadow-xs shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+        <i class="fa-solid fa-compass text-lg"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">수원역 KTX 직결</span>
+          <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">토·일 1박 2일 알짜배기</span>
+        </div>
+        <h1 class="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-tight">부산 여행 가이드북 & 인터랙티브 지도</h1>
+      </div>
+    </div>
+
+    <!-- Mode Switcher (Booklet Magazine vs Interactive Map) -->
+    <div class="flex items-center gap-2">
+      <div id="view-switcher" class="bg-slate-100 p-1 rounded-xl flex items-center border border-slate-200 text-xs font-bold">
+        <button id="btn-mode-magazine" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 bg-white text-blue-700 shadow-xs">
+          <i class="fa-solid fa-book-open"></i>
+          <span>여행 책자 뷰</span>
+        </button>
+        <button id="btn-mode-map" class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900">
+          <i class="fa-solid fa-map-location-dot"></i>
+          <span>실시간 지도 뷰</span>
+        </button>
+      </div>
+
+      <!-- Quick Action Tips Modal Button -->
+      <button id="btn-open-tips" class="hidden sm:flex px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition items-center gap-1.5 border border-blue-200">
+        <i class="fa-solid fa-ticket text-orange-500"></i>
+        <span>KTX & 꿀팁</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Workspace Container (Dynamic View Switch) -->
+  <main class="flex-1 overflow-hidden relative">
+
+    <!-- ========================================== -->
+    <!-- VIEW 1: MAGAZINE / GUIDEBOOK VIEW (Default) -->
+    <!-- ========================================== -->
+    <section id="magazine-view" class="h-full overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-8">
+      
+      <!-- Editorial Hero Banner -->
+      <div class="relative rounded-3xl overflow-hidden shadow-xl bg-slate-900 text-white min-h-[220px] sm:min-h-[260px] flex items-center p-6 sm:p-10">
+        <img src="https://images.unsplash.com/photo-1548115184-bc6544d06a58?auto=format&fit=crop&w=1600&q=80" 
+             alt="Busan Gwangan Bridge" 
+             class="absolute inset-0 w-full h-full object-cover opacity-45 mix-blend-overlay scale-105 transition duration-700 hover:scale-100"/>
+        <div class="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/80 to-transparent"></div>
+        
+        <div class="relative z-10 max-w-2xl space-y-3">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-medium tracking-wide text-blue-200">
+            <i class="fa-solid fa-train text-amber-400"></i> 수원 ⇄ 부산 KTX 주말 48시간 완벽 코스
+          </div>
+          <h2 class="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+            바다와 감성 골목,<br class="hidden sm:inline"/>
+            노을과 드론쇼까지 다 담은 1박 2일
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-xl">
+            수원역에서 KTX로 약 2시간 40분 만에 도착! 짐은 부산역에 맡기고 가볍게 원도심 감성 골목을 즐긴 뒤, 광안리 드론쇼와 해운대 바다열차까지 아낌없이 담았습니다.
+          </p>
+
+          <div class="pt-2 flex flex-wrap gap-2 text-xs font-semibold">
+            <span class="px-2.5 py-1 rounded-lg bg-blue-600/80 backdrop-blur">🚆 KTX 왕복</span>
+            <span class="px-2.5 py-1 rounded-lg bg-orange-600/80 backdrop-blur">📸 감천 & 청사포 포토존</span>
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-600/80 backdrop-blur">🐟 자갈치 & 조개구이</span>
+            <span class="px-2.5 py-1 rounded-lg bg-purple-600/80 backdrop-blur">🎆 토요 광안리 드론쇼</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Timeline & Visual Route Overview -->
+      <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-route text-blue-600"></i> 1박 2일 한눈에 보는 핵심 동선 요약
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">서부산·원도심에서 시작해 동부산 오션뷰로 마무리하는 최적의 직선 루트</p>
+          </div>
+          <button id="btn-jump-to-map" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition">
+            <span>지도에서 보기</span>
+            <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <!-- Day 1 Strip -->
+          <div class="p-3.5 bg-blue-50/60 border border-blue-200/60 rounded-xl space-y-2">
+            <div class="flex items-center justify-between font-bold text-blue-900">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-600"></span> 1일차 (토) : 원도심 감성 & 남포동 & 광안리</span>
+              <span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-200/60 text-blue-800">5개 거점</span>
+            </div>
+            <div class="text-slate-600 leading-relaxed">
+              수원역 KTX ➜ 부산역 (돼지국밥 & 짐캐리) ➜ 감천문화마을 (어린왕자) ➜ 자갈치시장 & BIFF (씨앗호떡) ➜ 송도 해상케이블카 & 구름다리 ➜ 광안리 해변 (회타운 저녁 & 드론쇼 관람)
+            </div>
+          </div>
+
+          <!-- Day 2 Strip -->
+          <div class="p-3.5 bg-orange-50/60 border border-orange-200/60 rounded-xl space-y-2">
+            <div class="flex items-center justify-between font-bold text-orange-900">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-orange-600"></span> 2일차 (일) : 해운대 오션레일 & 기장 & 수원 복귀</span>
+              <span class="text-[11px] px-2 py-0.5 rounded-full bg-orange-200/60 text-orange-800">5개 거점</span>
+            </div>
+            <div class="text-slate-600 leading-relaxed">
+              해운대 블루라인파크 (스카이캡슐) ➜ 청사포 다릿돌전망대 & 조개구이 점심 ➜ 해동용궁사 (해안사찰) ➜ 해운대 해변 & 동백섬 누리마루 ➜ 부산역 초량밀면 ➜ 수원행 KTX (22시 귀가)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Day Filter Tabs for Cards -->
+      <div class="flex items-center justify-between">
+        <div class="flex gap-2">
+          <button id="mag-filter-all" class="mag-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-xs">
+            전체 코스 (10곳)
+          </button>
+          <button id="mag-filter-day1" class="mag-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 hover:text-slate-900 border border-slate-200">
+            토요일 1일차
+          </button>
+          <button id="mag-filter-day2" class="mag-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 hover:text-slate-900 border border-slate-200">
+            일요일 2일차
+          </button>
+        </div>
+
+        <div class="text-xs text-slate-500 font-medium">
+          카드를 누르면 상세 팁과 지도가 열립니다 ✨
+        </div>
+      </div>
+
+      <!-- Guidebook Cards Grid -->
+      <div id="magazine-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- Rendered via JS -->
+      </div>
+
+      <!-- Budget & Checklist Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+        <!-- Budget Breakdown -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3 lg:col-span-2">
+          <h3 class="font-bold text-slate-900 flex items-center justify-between text-sm">
+            <span class="flex items-center gap-2"><i class="fa-solid fa-coins text-amber-500"></i> 1인 기준 추천 예산 가이드</span>
+            <span class="text-blue-600 text-xs font-extrabold bg-blue-50 px-2.5 py-1 rounded-lg">약 24 ~ 28만 원</span>
+          </h3>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span class="text-slate-500 block mb-1">🚄 KTX 왕복</span>
+              <span class="font-bold text-slate-800 text-sm">약 95,000원</span>
+              <p class="text-[11px] text-slate-400 mt-1">수원 ⇄ 부산 직통 기준</p>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span class="text-slate-500 block mb-1">🏨 1박 숙소 (2인 1실)</span>
+              <span class="font-bold text-slate-800 text-sm">약 70,000원</span>
+              <p class="text-[11px] text-slate-400 mt-1">광안리/해운대 오션뷰</p>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span class="text-slate-500 block mb-1">🚠 액티비티 2종</span>
+              <span class="font-bold text-slate-800 text-sm">약 35,000원</span>
+              <p class="text-[11px] text-slate-400 mt-1">송도 케이블카 + 스카이캡슐</p>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span class="text-slate-500 block mb-1">🍲 식비 & 카페</span>
+              <span class="font-bold text-slate-800 text-sm">약 65,000원</span>
+              <p class="text-[11px] text-slate-400 mt-1">국밥/회/조개구이/밀면</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Smart Packing Checklist -->
+        <div class="bg-gradient-to-br from-blue-900 to-indigo-900 text-white rounded-2xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
+          <div>
+            <h3 class="font-bold text-sm flex items-center gap-2 mb-2">
+              <i class="fa-solid fa-clipboard-check text-emerald-400"></i> 부산 주말 필수 준비물
+            </h3>
+            <ul class="text-xs space-y-2 text-blue-100">
+              <li class="flex items-center gap-2">
+                <i class="fa-regular fa-square-check text-emerald-400"></i> 편한 운동화 (감천/동백섬 도보 산책)
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="fa-regular fa-square-check text-emerald-400"></i> 보조배터리 (오션뷰 사진 촬영 다수)
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="fa-regular fa-square-check text-emerald-400"></i> 얇은 겉옷 (밤바다 바람 대비)
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="fa-regular fa-square-check text-emerald-400"></i> 스카이캡슐 사전 모바일 예매권
+              </li>
+            </ul>
+          </div>
+          <div class="text-[11px] bg-white/10 p-2.5 rounded-xl text-blue-200">
+            💡 <b>짐캐리 팁:</b> 토요일 오전 부산역 도착 즉시 맡기면 광안리 숙소로 직배송됩니다!
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================== -->
+    <!-- VIEW 2: INTERACTIVE MAP VIEW (Leaflet + OpenStreetMap) -->
+    <!-- ========================================== -->
+    <section id="map-view-container" class="h-full w-full hidden relative overflow-hidden">
+      <!-- Full Size Map Canvas -->
+      <div id="map" class="absolute inset-0 w-full h-full z-0 bg-slate-200"></div>
+
+      <!-- Top Overlay Quick Controls Bar -->
+      <div class="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+        <!-- Left: Drawer Toggle Button -->
+        <button id="btn-toggle-drawer" class="pointer-events-auto px-3.5 py-2 rounded-xl bg-white/95 backdrop-blur-md text-slate-800 font-bold text-xs shadow-lg border border-slate-200/80 flex items-center gap-2 hover:bg-blue-50 hover:text-blue-600 transition">
+          <i id="drawer-toggle-icon" class="fa-solid fa-bars-staggered text-blue-600"></i>
+          <span id="drawer-toggle-label">일정 목록 닫기</span>
+        </button>
+
+        <!-- Center: Day Route Filter Badges -->
+        <div class="pointer-events-auto bg-white/95 backdrop-blur-md p-1 rounded-2xl shadow-lg border border-slate-200/80 flex items-center gap-1">
+          <button id="map-tab-all" class="px-3 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
+            전체 코스
+          </button>
+          <button id="map-tab-day1" class="px-3 py-1.5 rounded-xl text-xs font-bold transition bg-blue-600 text-white shadow-xs">
+            1일차 (토)
+          </button>
+          <button id="map-tab-day2" class="px-3 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
+            2일차 (일)
+          </button>
+        </div>
+
+        <!-- Right: Map Fit Button -->
+        <button id="btn-fit-map" class="pointer-events-auto px-3 py-2 rounded-xl bg-white/95 backdrop-blur-md text-slate-700 hover:text-blue-600 font-bold text-xs shadow-lg border border-slate-200/80 flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-expand text-blue-500"></i>
+          <span class="hidden sm:inline">전체 맞춤</span>
+        </button>
+      </div>
+
+      <!-- Left Floating Itinerary Drawer (Collapsible) -->
+      <aside id="map-floating-drawer" class="absolute top-16 left-4 bottom-16 sm:bottom-6 w-[88vw] sm:w-84 md:w-96 z-20 bg-white/95 backdrop-blur-lg rounded-2xl shadow-2xl border border-slate-200/90 flex flex-col overflow-hidden">
+        <div class="p-3.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+          <div>
+            <h3 class="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+              <i class="fa-solid fa-route text-blue-600"></i> 
+              <span id="drawer-heading">1일차 코스 순서도</span>
+            </h3>
+            <p class="text-[11px] text-slate-500 mt-0.5">스팟을 클릭하면 지도 위치로 바로 이동합니다</p>
+          </div>
+          <span id="drawer-spot-count" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">5곳</span>
+        </div>
+
+        <!-- Scrollable Spot List -->
+        <div id="map-sidebar-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+          <!-- Populated via JS -->
+        </div>
+
+        <!-- Drawer Bottom Action Guide -->
+        <div class="p-2.5 bg-slate-50/80 border-t border-slate-100 text-center flex items-center justify-between text-[11px] text-slate-500">
+          <span>💡 마커를 누르면 상세 정보가 뜹니다</span>
+          <button id="btn-drawer-quick-hide" class="text-blue-600 font-bold hover:underline">
+            지도 크게 보기
+          </button>
+        </div>
+      </aside>
+
+      <!-- Bottom Step Tour Floating Navigator -->
+      <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl shadow-xl border border-slate-200/90 flex items-center gap-3">
+        <button id="btn-nav-prev" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-bold transition">
+          <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <div class="text-center min-w-[140px] sm:min-w-[170px]">
+          <div id="nav-step-label" class="text-[10px] font-black text-blue-600 uppercase tracking-wider">Step 1 of 5</div>
+          <div id="nav-step-title" class="text-xs font-bold text-slate-900 truncate max-w-[160px] sm:max-w-[200px]">부산역 도착 & 본전돼지국밥</div>
+        </div>
+        <button id="btn-nav-next" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-bold transition">
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+
+      <!-- Right Legend Overlay (Desktop) -->
+      <div class="absolute bottom-4 right-4 z-20 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-slate-200 shadow-md text-xs space-y-1.5 hidden md:block">
+        <div class="font-bold text-slate-800 mb-1 flex items-center gap-1.5 text-[11px]">
+          <i class="fa-solid fa-location-dot text-blue-600"></i> 노선 구분
+        </div>
+        <div class="flex items-center gap-2 text-slate-600 text-[11px]">
+          <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+          <span>1일차 원도심 & 광안리 (토)</span>
+        </div>
+        <div class="flex items-center gap-2 text-slate-600 text-[11px]">
+          <span class="w-2.5 h-2.5 rounded-full bg-orange-600"></span>
+          <span>2일차 해운대 & 기장 (일)</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: SPOT DETAIL MODAL (Card Click or Pin Click) -->
+  <!-- ========================================== -->
+  <div id="spot-modal" class="fixed inset-0 bg-black/60 z-50 backdrop-blur-xs hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl relative flex flex-col animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Close Button -->
+      <button id="btn-close-spot-modal" class="absolute top-3 right-3 text-white bg-black/50 hover:bg-black/70 rounded-full w-8 h-8 flex items-center justify-center z-20 transition">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <!-- Modal Image Cover -->
+      <div class="relative h-52 sm:h-56 w-full bg-slate-900 shrink-0">
+        <img id="modal-img" src="" alt="Spot Cover" class="w-full h-full object-cover"/>
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent"></div>
+        <div class="absolute bottom-3.5 left-4 right-4 text-white">
+          <div class="flex items-center gap-2 mb-1">
+            <span id="modal-day-badge" class="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-blue-600">
+              Day 1 • Step 1
+            </span>
+            <span id="modal-category" class="text-[11px] font-bold text-slate-200">카테고리</span>
+          </div>
+          <h3 id="modal-title" class="text-xl font-black leading-snug">스팟 이름</h3>
+        </div>
+      </div>
+
+      <!-- Modal Content Body -->
+      <div class="p-5 overflow-y-auto space-y-4 text-xs sm:text-sm flex-1">
+        <!-- Quick Meta -->
+        <div class="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-600">
+          <div class="flex items-center gap-1.5 font-medium">
+            <i class="fa-regular fa-clock text-blue-600"></i>
+            <span id="modal-time">10:00 (1시간 20분 소요)</span>
+          </div>
+          <div class="font-bold text-slate-900" id="modal-cost">예상 비용</div>
+        </div>
+
+        <!-- Description -->
+        <div>
+          <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider mb-1 flex items-center gap-1">
+            <i class="fa-solid fa-align-left text-slate-400"></i> 핵심 즐길거리
+          </h4>
+          <p id="modal-desc" class="text-slate-600 leading-relaxed text-xs sm:text-sm">
+            설명 내용
+          </p>
+        </div>
+
+        <!-- Local Tip -->
+        <div class="p-3.5 bg-amber-50/80 border border-amber-200/70 rounded-xl text-amber-900 text-xs space-y-1">
+          <div class="font-bold flex items-center gap-1.5">
+            <i class="fa-solid fa-lightbulb text-amber-500"></i> 여행 작가의 실전 꿀팁
+          </div>
+          <p id="modal-tip" class="leading-relaxed">
+            꿀팁 내용
+          </p>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="pt-2 grid grid-cols-2 gap-2.5">
+          <a id="modal-link-naver" href="#" target="_blank" rel="noopener noreferrer"
+             class="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold text-center transition flex items-center justify-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-map-pin"></i> 네이버 지도 검색
+          </a>
+          <button id="modal-btn-view-on-map"
+             class="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-location-arrow"></i> 지도에서 위치 보기
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: TIPS & KTX RESERVATION GUIDE -->
+  <!-- ========================================== -->
+  <div id="tips-modal" class="fixed inset-0 bg-black/60 z-50 backdrop-blur-xs hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full max-h-[88vh] overflow-y-auto shadow-2xl p-6 relative">
+      <button id="btn-close-tips" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-lg">
+          <i class="fa-solid fa-fire"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-black text-slate-900">수원 ⇄ 부산 1박 2일 핵심 예약 꿀팁</h2>
+          <p class="text-xs text-slate-500">출발 1달 전 체크해야 실패 없는 3가지</p>
+        </div>
+      </div>
+
+      <div class="space-y-3.5 text-xs text-slate-600">
+        <div class="p-3.5 bg-blue-50/80 border border-blue-200/60 rounded-xl space-y-1.5">
+          <div class="font-bold text-blue-950 flex items-center gap-1.5">
+            <i class="fa-solid fa-train"></i> 1. KTX 수원 ⇄ 부산 티켓팅
+          </div>
+          <p class="text-slate-700 leading-relaxed">
+            • <b>가는 편 (토 07:30~08:00 경) :</b> 수원역 KTX 직결 편성은 오전 10시경 부산 도착으로 딱 좋습니다.<br/>
+            • <b>오는 편 (일 19:30~20:30 경) :</b> 일요일 저녁 상행선은 가장 빠르게 매진됩니다. <b>출발 1개월 전 오전 7시 코레일톡 오픈 알림</b>을 켜두세요!
+          </p>
+        </div>
+
+        <div class="p-3.5 bg-orange-50/80 border border-orange-200/60 rounded-xl space-y-1.5">
+          <div class="font-bold text-orange-950 flex items-center gap-1.5">
+            <i class="fa-solid fa-ticket"></i> 2. 블루라인파크 스카이캡슐 예약 노하우
+          </div>
+          <p class="text-slate-700 leading-relaxed">
+            • <b>미포 ➜ 청사포 방향</b>이 바깥쪽 레일이라 오션뷰 사진이 훨씬 아름답습니다.<br/>
+            • 주말은 현장 발권이 불가능할 정도로 대기가 기므로 공식 홈페이지에서 <b>일요일 오전 09:30~10:00 타임</b>을 사전 예약하세요.
+          </p>
+        </div>
+
+        <div class="p-3.5 bg-purple-50/80 border border-purple-200/60 rounded-xl space-y-1.5">
+          <div class="font-bold text-purple-950 flex items-center gap-1.5">
+            <i class="fa-solid fa-moon"></i> 3. 토요일 광안리 드론쇼 명당
+          </div>
+          <p class="text-slate-700 leading-relaxed">
+            • 매주 토요일 광안리 해변에서 무료 진행 (동절기 19시/21시, 하절기 20시/22시 각 10분간).<br/>
+            • 민락회센터 앞 모래사장이나 오션뷰 펍 테라스 자리에 30분 전 착석 추천!
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-5">
+        <button id="btn-close-tips-bottom" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition">
+          일정 확인하러 가기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Logic -->
+  <script>
+    // Trip Spot Data
+    const itineraryData = [
+      {
+        id: "spot-1",
+        day: 1,
+        step: 1,
+        time: "10:15",
+        title: "부산역 도착 & 본전돼지국밥",
+        category: "식도락 / 교통 거점",
+        lat: 35.1158,
+        lng: 129.0414,
+        cost: "국밥 9,000 ~ 10,000원",
+        duration: "1시간 15분",
+        tag: "깊은 국물 & 부추김치 & 짐 배송",
+        img: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+        description: "수원역에서 아침 일찍 KTX를 타고 2시간 40분 만에 부산역 도착! 부산역 바로 옆 30년 전통 본전돼지국밥(또는 차이나타운 신발원 군만두)에서 든든하게 아침 겸 점심을 시작합니다.",
+        tip: "부산역 1층 '짐캐리(ZimCarry)'에 캐리어를 맡기면 숙소(광안리/해운대) 로비로 직배송해 주어 두 손 가볍게 관광할 수 있습니다.",
+        mapLink: "https://map.naver.com/v5/search/%EB%B6%80%EC%82%B0%EC%97%AD"
+      },
+      {
+        id: "spot-2",
+        day: 1,
+        step: 2,
+        time: "11:45",
+        title: "감천문화마을",
+        category: "감성 골목 / 포토존",
+        lat: 35.0975,
+        lng: 129.0106,
+        cost: "입장 무료 (체험비 별도)",
+        duration: "1시간 30분",
+        tag: "어린왕자와 사막여우 & 파스텔 지붕",
+        img: "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=800&q=80",
+        description: "알록달록 파스텔톤 계단식 주택들이 바다를 마주보고 서 있는 '한국의 마추픽추'. 좁은 골목길 사이 벽화와 어린왕자 난간 포토존에서 인생샷을 남겨보세요.",
+        tip: "부산역에서 카카오택시 탑승 시 약 15분(7천원 선)으로 매우 가깝습니다. 언덕 골목이 많으니 편안한 신발 필수!",
+        mapLink: "https://map.naver.com/v5/search/%EA%B0%90%EC%82%B0%EB%AC%B8%ED%99%94%EB%A7%88%EC%9D%84"
+      },
+      {
+        id: "spot-3",
+        day: 1,
+        step: 3,
+        time: "13:40",
+        title: "자갈치시장 & BIFF 광장",
+        category: "전통시장 / 길거리 음식",
+        lat: 35.0968,
+        lng: 129.0306,
+        cost: "씨앗호떡 2,000원 / 비빔당면 4,000원",
+        duration: "1시간 30분",
+        tag: "원조 씨앗호떡 & 남포동 활기",
+        img: "https://images.unsplash.com/photo-1533900298318-6b8da08a523e?auto=format&fit=crop&w=800&q=80",
+        description: "살아 숨 쉬는 자갈치 수산시장의 바다 내음과 BIFF 영화거리 탐방! 겉바속촉 고소한 견과류 씨앗호떡과 비빔당면, 유부보따리를 간식으로 맛봅니다.",
+        tip: "도보로 국제시장 '꽃분이네'와 부평깡통시장 야시장 골목까지 자연스럽게 연결되어 산책하기 좋습니다.",
+        mapLink: "https://map.naver.com/v5/search/%EC%9E%90%EA%B0%88%EC%B9%98%EC%8B%9C%EC%9E%A5"
+      },
+      {
+        id: "spot-4",
+        day: 1,
+        step: 4,
+        time: "15:40",
+        title: "송도 해상케이블카 & 용궁구름다리",
+        category: "오션 액티비티 / 절경",
+        lat: 35.0763,
+        lng: 129.0195,
+        cost: "왕복 17,000원 (바닥투명 22,000원)",
+        duration: "2시간",
+        tag: "바다 위 86m 공중 스릴 & 해안절벽",
+        img: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
+        description: "송도해수욕장 위를 날아 암남공원까지 바다 위를 가로지르는 국내 최장급 해상케이블카. 투명 바닥 크리스탈 크루즈에서 바라보는 윤슬이 눈부십니다.",
+        tip: "암남공원에 하차 후 '송도용궁구름다리(입장료 1,000원)'로 연결되어 기암괴석과 동락섬 바다를 360도로 조망할 수 있습니다.",
+        mapLink: "https://map.naver.com/v5/search/%EC%86%A1%EB%8F%84%ED%95%B4%EC%83%81%EC%BC%80%EC%9D%B4%EB%B8%94%EC%B9%B4"
+      },
+      {
+        id: "spot-5",
+        day: 1,
+        step: 5,
+        time: "18:40",
+        title: "광안리 해수욕장 & 토요 드론쇼",
+        category: "야경 / 디너 / 숙소",
+        lat: 35.1532,
+        lng: 129.1189,
+        cost: "민락회센터 1인 3~4만원선",
+        duration: "자유 일정",
+        tag: "광안대교 오션뷰 & 환상 드론라이트쇼",
+        img: "https://images.unsplash.com/photo-1548115184-bc6544d06a58?auto=format&fit=crop&w=800&q=80",
+        description: "화려하게 불을 밝힌 광안대교 야경! 민락회타운에서 싱싱한 모둠회와 대선 소주를 즐긴 뒤, 토요일 밤 광안리 밤하늘을 수놓는 수백 대의 드론쇼를 관람합니다.",
+        tip: "숙소는 광안리 해변 오션뷰 호텔 또는 에어비앤비로 잡으면 아침에 일출까지 감상할 수 있어 만족도가 가장 높습니다.",
+        mapLink: "https://map.naver.com/v5/search/%EA%B4%91%EC%95%88%EB%A6%AC%ED%95%B4%EC%88%98%EC%9A%95%EC%9E%A5"
+      },
+      {
+        id: "spot-6",
+        day: 2,
+        step: 1,
+        time: "09:30",
+        title: "해운대 블루라인파크 (미포 ➜ 청사포)",
+        category: "오션 레일 / 인생 액티비티",
+        lat: 35.1587,
+        lng: 129.1724,
+        cost: "스카이캡슐 2인 35,000원",
+        duration: "1시간",
+        tag: "동해남부선 해안 레일 & 알록달록 캡슐",
+        img: "https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=800&q=80",
+        description: "옛 동해남부선 폐선 부지를 따라 7~10m 공중에서 해안선을 달리는 스카이캡슐. 천천히 움직이는 프라이빗 캡슐 안에서 드넓은 동해 바다를 만끽합니다.",
+        tip: "미포에서 청사포로 가는 편도가 바다 쪽 레일이라 사진이 가장 잘 나옵니다. 공식 웹사이트 사전 예약 필수!",
+        mapLink: "https://map.naver.com/v5/search/%ED%95%B4%EC%9A%B4%EB%8C%80%EB%B8%94%EB%A3%A8%EB%9D%BC%EC%9D%B8%ED%8C%8C%ED%81%AC"
+      },
+      {
+        id: "spot-7",
+        day: 2,
+        step: 2,
+        time: "11:00",
+        title: "청사포 다릿돌전망대 & 조개구이 점심",
+        category: "스카이워크 / 해안 점심",
+        lat: 35.1643,
+        lng: 129.1916,
+        cost: "조개구이/장어 1인 2.5~3.5만원",
+        duration: "1시간 40분",
+        tag: "슬램덩크 바다 건널목 & 쌍둥이 등대",
+        img: "https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80",
+        description: "청사포 해변열차 정거장 앞 바다가 내려다보이는 건널목은 '슬램덩크 카마쿠라' 감성으로 유명합니다. 투명 다릿돌전망대를 걷고 바다 앞 조개구이로 점심!",
+        tip: "청사포 하진이네/수민이네 등 포차 감성의 조개구이집에서 바다 바람을 맞으며 든든하게 식사해보세요.",
+        mapLink: "https://map.naver.com/v5/search/%EC%B2%AD%EC%82%AC%ED%8F%AC%EB%8B%A4%EB%A6%BF%EB%8F%8C%EC%A0%84%EB%A7%9D%EB%8C%80"
+      },
+      {
+        id: "spot-8",
+        day: 2,
+        step: 3,
+        time: "13:30",
+        title: "해동용궁사",
+        category: "수상 해안 사찰 / 명승지",
+        lat: 35.1883,
+        lng: 129.2233,
+        cost: "입장 무료 (주차료 별도)",
+        duration: "1시간 30분",
+        tag: "한국에서 가장 아름다운 바닷가 절",
+        img: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?auto=format&fit=crop&w=800&q=80",
+        description: "푸른 파도가 부서지는 바위 절벽 위에 지어진 신비로운 수상 사찰. 한 가지 소원은 반드시 들어준다는 전설이 있어 여행자들의 발길이 끊이지 않습니다.",
+        tip: "용궁사 들어가는 108장수계단 입구에서 십원빵, 부산 어묵 등 주전부리를 즐길 수 있습니다.",
+        mapLink: "https://map.naver.com/v5/search/%ED%95%B4%EB%8F%99%EC%9A%A9%EA%B6%81%EC%82%AC"
+      },
+      {
+        id: "spot-9",
+        day: 2,
+        step: 4,
+        time: "15:45",
+        title: "해운대 해수욕장 & 동백섬 누리마루",
+        category: "산책 / 마린시티 뷰",
+        lat: 35.1588,
+        lng: 129.1604,
+        cost: "입장 무료",
+        duration: "1시간 30분",
+        tag: "동백나무 숲길 & APEC 하우스 & 마린시티",
+        img: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
+        description: "광활한 해운대 백사장을 거닐고, 솔향 가득한 동백섬 둘레길을 걷습니다. 누리마루 APEC 하우스 전망대에서 바라보는 마린시티 마천루 풍경이 압권입니다.",
+        tip: "동백섬 등대 광장과 황옥공주 인어상 바위는 탁 트인 파도 소리와 함께 사진이 정말 잘 나옵니다.",
+        mapLink: "https://map.naver.com/v5/search/%ED%95%B4%EC%9A%B4%EB%8C%80%ED%95%B4%EC%88%98%EC%9A%95%EC%9E%A5"
+      },
+      {
+        id: "spot-10",
+        day: 2,
+        step: 5,
+        time: "18:00",
+        title: "부산역 복귀 & 초량밀면 / 수원행 KTX",
+        category: "귀가 / 기념품 / 식도락",
+        lat: 35.1158,
+        lng: 129.0414,
+        cost: "밀면 7,500원 / 어묵세트",
+        duration: "1시간 30분",
+        tag: "초량밀면 왕만두 & 삼진어묵 쇼핑",
+        img: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=800&q=80",
+        description: "해운대에서 지하철 2호선(서면 환승) 또는 급행버스로 부산역 이동! 부산역 바로 앞 유명 '초량밀면'에서 시원한 살얼음 밀면과 수제 왕만두를 먹고 부산 어묵을 챙겨 KTX에 탑승합니다.",
+        tip: "19:30~20:10 KTX를 탑승하면 밤 22:30 전후 수원역 도착! 다음 날 출근이나 등교에도 무리 없는 깔끔한 귀가 스케줄 완성.",
+        mapLink: "https://map.naver.com/v5/search/%EC%B4%88%EB%9F%89%EB%B0%80%EB%A9%B4"
+      }
+    ];
+
+    // State
+    let currentMagFilter = 'all';
+    let currentMapFilter = 1;
+    let currentStepIndex = 0;
+    let isDrawerOpen = true;
+    let map = null;
+    let markersLayer = null;
+    let polylineLayer = null;
+    let markersMap = {};
+    let activeSpotForModal = null;
+
+    // -------------------------------------------------------------
+    // 1. OpenStreetMap Leaflet Init (API Key 절대 필요 없음!)
+    // -------------------------------------------------------------
+    function initLeafletMap() {
+      if (map) return; // already initialized
+
+      map = L.map('map', {
+        zoomControl: false // Move or keep minimal
+      }).setView([35.1450, 129.1100], 12);
+
+      // Re-add Zoom control at bottom right to avoid header collision
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // 공식 OpenStreetMap 공개 타일 (별도 인증 키 없이 무제한 표시)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      markersLayer = L.layerGroup().addTo(map);
+      polylineLayer = L.layerGroup().addTo(map);
+
+      renderMapElements();
+
+      // Ensure proper size on initial render
+      setTimeout(() => {
+        if (map) map.invalidateSize();
+      }, 200);
+    }
+
+    function renderMapElements(preserveFocus = false) {
+      if (!map) return;
+
+      markersLayer.clearLayers();
+      polylineLayer.clearLayers();
+      markersMap = {};
+
+      const filtered = itineraryData.filter(item => {
+        if (currentMapFilter === 'all') return true;
+        return item.day === currentMapFilter;
+      });
+
+      // Update sidebar list in Map view
+      const sidebarContainer = document.getElementById('map-sidebar-list');
+      sidebarContainer.innerHTML = '';
+
+      // Update drawer counts
+      const countLabel = document.getElementById('drawer-spot-count');
+      if (countLabel) countLabel.textContent = `${filtered.length}곳`;
+
+      const headingLabel = document.getElementById('drawer-heading');
+      if (headingLabel) {
+        headingLabel.textContent = currentMapFilter === 'all' 
+          ? '전체 코스 순서도' 
+          : `${currentMapFilter}일차 코스 순서도`;
+      }
+
+      const bounds = [];
+      const day1Coords = [];
+      const day2Coords = [];
+
+      filtered.forEach((spot, idx) => {
+        const isDay1 = spot.day === 1;
+        const colorClass = isDay1 ? 'pin-day1' : 'pin-day2';
+
+        // Custom Pin Icon
+        const icon = L.divIcon({
+          className: 'leaflet-clean-icon',
+          html: `<div class="pin-badge ${colorClass}">
+                  <span>${spot.step}</span>
+                 </div>`,
+          iconSize: [36, 36],
+          iconAnchor: [18, 36],
+          popupAnchor: [0, -34]
+        });
+
+        const marker = L.marker([spot.lat, spot.lng], { icon: icon });
+
+        // Popup HTML
+        const popupContent = `
+          <div class="w-64 overflow-hidden font-sans">
+            <div class="relative h-28 w-full bg-slate-900">
+              <img src="${spot.img}" alt="${spot.title}" class="w-full h-full object-cover"/>
+              <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+              <div class="absolute bottom-2 left-3 right-3 text-white">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isDay1 ? 'bg-blue-600' : 'bg-orange-600'}">
+                  Day ${spot.day} • Step ${spot.step}
+                </span>
+                <div class="font-bold text-xs mt-1 truncate">${spot.title}</div>
+              </div>
+            </div>
+            <div class="p-3 text-xs space-y-2 bg-white">
+              <div class="flex items-center justify-between text-slate-500">
+                <span><i class="fa-regular fa-clock text-blue-500 mr-1"></i>${spot.time}</span>
+                <span class="font-semibold text-emerald-600">${spot.category}</span>
+              </div>
+              <p class="text-slate-600 line-clamp-2 leading-relaxed text-[11px]">${spot.description}</p>
+              <button onclick="openModalById('${spot.id}')" 
+                      class="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] transition">
+                상세 정보 & 꿀팁 보기
+              </button>
+            </div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent, { maxWidth: 280 });
+        marker.addTo(markersLayer);
+        markersMap[spot.id] = marker;
+
+        bounds.push([spot.lat, spot.lng]);
+        if (isDay1) day1Coords.push([spot.lat, spot.lng]);
+        else day2Coords.push([spot.lat, spot.lng]);
+
+        // Sidebar Item
+        const item = document.createElement('div');
+        item.className = 'p-2.5 rounded-xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/20 transition cursor-pointer flex items-center gap-2.5 shadow-2xs';
+        item.innerHTML = `
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs text-white shrink-0 ${isDay1 ? 'bg-blue-600' : 'bg-orange-600'}">
+            ${spot.step}
+          </div>
+          <div class="flex-1 min-w-0 text-left">
+            <div class="text-[10px] text-slate-400 font-bold">${spot.time} • Day ${spot.day}</div>
+            <div class="text-xs font-bold text-slate-800 truncate">${spot.title}</div>
+          </div>
+          <i class="fa-solid fa-angle-right text-slate-300 text-xs"></i>
+        `;
+        item.addEventListener('click', () => {
+          currentStepIndex = idx;
+          updateNavigatorDisplay(filtered);
+          map.flyTo([spot.lat, spot.lng], 14, { duration: 0.6 });
+          marker.openPopup();
+          
+          // On mobile, auto minimize drawer so user sees the map
+          if (window.innerWidth < 768) {
+            setDrawerState(false);
+          }
+        });
+        sidebarContainer.appendChild(item);
+      });
+
+      // Route Polyline
+      if (currentMapFilter === 'all' || currentMapFilter === 1) {
+        if (day1Coords.length > 1) {
+          L.polyline(day1Coords, { color: '#2563eb', weight: 4, dashArray: '5, 8', opacity: 0.85 }).addTo(polylineLayer);
+        }
+      }
+      if (currentMapFilter === 'all' || currentMapFilter === 2) {
+        if (day2Coords.length > 1) {
+          L.polyline(day2Coords, { color: '#ea580c', weight: 4, dashArray: '5, 8', opacity: 0.85 }).addTo(polylineLayer);
+        }
+      }
+
+      if (bounds.length > 0 && !preserveFocus) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+
+      // Update bottom navigator for current filtered list
+      currentStepIndex = 0;
+      updateNavigatorDisplay(filtered);
+    }
+
+    // Update Bottom Navigator
+    function updateNavigatorDisplay(filteredList) {
+      if (!filteredList || filteredList.length === 0) return;
+      if (currentStepIndex >= filteredList.length) currentStepIndex = 0;
+      if (currentStepIndex < 0) currentStepIndex = filteredList.length - 1;
+
+      const spot = filteredList[currentStepIndex];
+      const lblStep = document.getElementById('nav-step-label');
+      const lblTitle = document.getElementById('nav-step-title');
+
+      if (lblStep && spot) lblStep.textContent = `Day ${spot.day} • Step ${spot.step} of ${filteredList.length}`;
+      if (lblTitle && spot) lblTitle.textContent = spot.title;
+    }
+
+    function navigateStep(direction) {
+      const filtered = itineraryData.filter(item => {
+        if (currentMapFilter === 'all') return true;
+        return item.day === currentMapFilter;
+      });
+      if (filtered.length === 0) return;
+
+      currentStepIndex += direction;
+      if (currentStepIndex >= filtered.length) currentStepIndex = 0;
+      if (currentStepIndex < 0) currentStepIndex = filtered.length - 1;
+
+      updateNavigatorDisplay(filtered);
+      const spot = filtered[currentStepIndex];
+      if (spot && map) {
+        map.flyTo([spot.lat, spot.lng], 14, { duration: 0.5 });
+        if (markersMap[spot.id]) {
+          markersMap[spot.id].openPopup();
+        }
+      }
+    }
+
+    function setDrawerState(open) {
+      isDrawerOpen = open;
+      const drawer = document.getElementById('map-floating-drawer');
+      const label = document.getElementById('drawer-toggle-label');
+      const icon = document.getElementById('drawer-toggle-icon');
+
+      if (drawer) {
+        if (open) {
+          drawer.classList.remove('drawer-closed');
+          if (label) label.textContent = '일정 목록 닫기';
+          if (icon) icon.className = 'fa-solid fa-xmark text-slate-500';
+        } else {
+          drawer.classList.add('drawer-closed');
+          if (label) label.textContent = '일정 목록 열기';
+          if (icon) icon.className = 'fa-solid fa-bars-staggered text-blue-600';
+        }
+      }
+      setTimeout(() => {
+        if (map) map.invalidateSize();
+      }, 350);
+    }
+
+    function renderMapElements() {
+      if (!map) return;
+
+      markersLayer.clearLayers();
+      polylineLayer.clearLayers();
+      markersMap = {};
+
+      const filtered = itineraryData.filter(item => {
+        if (currentMapFilter === 'all') return true;
+        return item.day === currentMapFilter;
+      });
+
+      // Update sidebar list in Map view
+      const sidebarContainer = document.getElementById('map-sidebar-list');
+      sidebarContainer.innerHTML = '';
+
+      const bounds = [];
+      const day1Coords = [];
+      const day2Coords = [];
+
+      filtered.forEach(spot => {
+        const isDay1 = spot.day === 1;
+        const colorClass = isDay1 ? 'pin-day1' : 'pin-day2';
+
+        // Custom Pin Icon
+        const icon = L.divIcon({
+          className: 'leaflet-clean-icon',
+          html: `<div class="pin-badge ${colorClass}">
+                  <span>${spot.step}</span>
+                 </div>`,
+          iconSize: [36, 36],
+          iconAnchor: [18, 36],
+          popupAnchor: [0, -34]
+        });
+
+        const marker = L.marker([spot.lat, spot.lng], { icon: icon });
+
+        // Popup HTML
+        const popupContent = `
+          <div class="w-64 overflow-hidden font-sans">
+            <div class="relative h-28 w-full bg-slate-900">
+              <img src="${spot.img}" alt="${spot.title}" class="w-full h-full object-cover"/>
+              <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+              <div class="absolute bottom-2 left-3 right-3 text-white">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isDay1 ? 'bg-blue-600' : 'bg-orange-600'}">
+                  Day ${spot.day} • Step ${spot.step}
+                </span>
+                <div class="font-bold text-xs mt-1 truncate">${spot.title}</div>
+              </div>
+            </div>
+            <div class="p-3 text-xs space-y-2 bg-white">
+              <div class="flex items-center justify-between text-slate-500">
+                <span><i class="fa-regular fa-clock text-blue-500 mr-1"></i>${spot.time}</span>
+                <span class="font-semibold text-emerald-600">${spot.category}</span>
+              </div>
+              <p class="text-slate-600 line-clamp-2 leading-relaxed text-[11px]">${spot.description}</p>
+              <button onclick="openModalById('${spot.id}')" 
+                      class="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] transition">
+                상세 정보 & 꿀팁 보기
+              </button>
+            </div>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent, { maxWidth: 280 });
+        marker.addTo(markersLayer);
+        markersMap[spot.id] = marker;
+
+        bounds.push([spot.lat, spot.lng]);
+        if (isDay1) day1Coords.push([spot.lat, spot.lng]);
+        else day2Coords.push([spot.lat, spot.lng]);
+
+        // Sidebar Item
+        const item = document.createElement('div');
+        item.className = 'p-2.5 rounded-xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/20 transition cursor-pointer flex items-center gap-2.5';
+        item.innerHTML = `
+          <div class="w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs text-white shrink-0 ${isDay1 ? 'bg-blue-600' : 'bg-orange-600'}">
+            ${spot.step}
+          </div>
+          <div class="flex-1 min-w-0 text-left">
+            <div class="text-[10px] text-slate-400 font-bold">${spot.time} • Day ${spot.day}</div>
+            <div class="text-xs font-bold text-slate-800 truncate">${spot.title}</div>
+          </div>
+        `;
+        item.addEventListener('click', () => {
+          map.flyTo([spot.lat, spot.lng], 14, { duration: 0.6 });
+          marker.openPopup();
+        });
+        sidebarContainer.appendChild(item);
+      });
+
+      // Route Polyline
+      if (currentMapFilter === 'all' || currentMapFilter === 1) {
+        if (day1Coords.length > 1) {
+          L.polyline(day1Coords, { color: '#2563eb', weight: 4, dashArray: '5, 8', opacity: 0.8 }).addTo(polylineLayer);
+        }
+      }
+      if (currentMapFilter === 'all' || currentMapFilter === 2) {
+        if (day2Coords.length > 1) {
+          L.polyline(day2Coords, { color: '#ea580c', weight: 4, dashArray: '5, 8', opacity: 0.8 }).addTo(polylineLayer);
+        }
+      }
+
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2. Editorial Magazine Cards Render
+    // -------------------------------------------------------------
+    function renderMagazineCards() {
+      const container = document.getElementById('magazine-cards-container');
+      container.innerHTML = '';
+
+      const filtered = itineraryData.filter(item => {
+        if (currentMagFilter === 'all') return true;
+        return item.day === currentMagFilter;
+      });
+
+      filtered.forEach(spot => {
+        const isDay1 = spot.day === 1;
+        const card = document.createElement('article');
+        card.className = 'group bg-white rounded-2xl overflow-hidden border border-slate-200/90 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col cursor-pointer hover:-translate-y-1';
+        
+        card.innerHTML = `
+          <!-- Card Image -->
+          <div class="relative h-44 w-full overflow-hidden bg-slate-900">
+            <img src="${spot.img}" alt="${spot.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500 opacity-95"/>
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent"></div>
+            
+            <div class="absolute top-3 left-3 flex items-center gap-1.5">
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold text-white shadow-sm ${isDay1 ? 'bg-blue-600' : 'bg-orange-600'}">
+                Day ${spot.day} • Step ${spot.step}
+              </span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/50 text-white backdrop-blur-xs">
+                ${spot.time}
+              </span>
+            </div>
+
+            <div class="absolute bottom-2.5 left-3.5 right-3.5 text-white">
+              <span class="text-[11px] font-medium text-blue-200 block">${spot.category}</span>
+              <h4 class="text-base font-bold truncate leading-tight">${spot.title}</h4>
+            </div>
+          </div>
+
+          <!-- Card Body -->
+          <div class="p-4 flex-1 flex flex-col justify-between space-y-3">
+            <div>
+              <p class="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                ${spot.description}
+              </p>
+              
+              <div class="mt-2.5 inline-block text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                🏷️ ${spot.tag}
+              </div>
+            </div>
+
+            <!-- Bottom Footnote -->
+            <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+              <span class="text-slate-500 font-medium">
+                <i class="fa-regular fa-clock text-slate-400 mr-1"></i>${spot.duration}
+              </span>
+              <span class="text-blue-600 font-bold group-hover:underline flex items-center gap-1">
+                상세보기 <i class="fa-solid fa-chevron-right text-[9px]"></i>
+              </span>
+            </div>
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          openModalWithSpot(spot);
+        });
+
+        container.appendChild(card);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 3. Modal Handlers
+    // -------------------------------------------------------------
+    function openModalWithSpot(spot) {
+      activeSpotForModal = spot;
+      const modal = document.getElementById('spot-modal');
+      const isDay1 = spot.day === 1;
+
+      document.getElementById('modal-img').src = spot.img;
+      document.getElementById('modal-title').textContent = spot.title;
+      document.getElementById('modal-category').textContent = spot.category;
+      
+      const badge = document.getElementById('modal-day-badge');
+      badge.textContent = `Day ${spot.day} • Step ${spot.step}`;
+      badge.className = `text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isDay1 ? 'bg-blue-600' : 'bg-orange-600'}`;
+
+      document.getElementById('modal-time').textContent = `${spot.time} (약 ${spot.duration})`;
+      document.getElementById('modal-cost').textContent = spot.cost;
+      document.getElementById('modal-desc').textContent = spot.description;
+      document.getElementById('modal-tip').textContent = spot.tip;
+
+      document.getElementById('modal-link-naver').href = spot.mapLink;
+
+      modal.classList.remove('hidden');
+    }
+
+    window.openModalById = function(id) {
+      const spot = itineraryData.find(s => s.id === id);
+      if (spot) openModalWithSpot(spot);
+    };
+
+    function closeModal() {
+      document.getElementById('spot-modal').classList.add('hidden');
+    }
+
+    // -------------------------------------------------------------
+    // 4. View Switcher Logic (Magazine vs Map)
+    // -------------------------------------------------------------
+    function setupViewSwitching() {
+      const magView = document.getElementById('magazine-view');
+      const mapViewContainer = document.getElementById('map-view-container');
+      const btnMag = document.getElementById('btn-mode-magazine');
+      const btnMap = document.getElementById('btn-mode-map');
+
+      function showMagazine() {
+        magView.classList.remove('hidden');
+        mapViewContainer.classList.add('hidden');
+
+        btnMag.className = 'px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 bg-white text-blue-700 shadow-xs';
+        btnMap.className = 'px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900';
+      }
+
+      function showMap(focusSpot = null) {
+        magView.classList.add('hidden');
+        mapViewContainer.classList.remove('hidden');
+
+        btnMap.className = 'px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 bg-white text-blue-700 shadow-xs';
+        btnMag.className = 'px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 text-slate-600 hover:text-slate-900';
+
+        // Trigger map initialization or resize
+        if (!map) {
+          initLeafletMap();
+        }
+
+        setTimeout(() => {
+          if (map) {
+            map.invalidateSize();
+            if (focusSpot) {
+              map.flyTo([focusSpot.lat, focusSpot.lng], 14, { duration: 0.5 });
+              if (markersMap[focusSpot.id]) markersMap[focusSpot.id].openPopup();
+            }
+          }
+        }, 150);
+      }
+
+      btnMag.addEventListener('click', showMagazine);
+      btnMap.addEventListener('click', () => showMap());
+
+      document.getElementById('btn-jump-to-map').addEventListener('click', () => showMap());
+
+      // Modal "지도에서 위치 보기" button
+      document.getElementById('modal-btn-view-on-map').addEventListener('click', () => {
+        closeModal();
+        if (activeSpotForModal) {
+          showMap(activeSpotForModal);
+        } else {
+          showMap();
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 5. Filter & Modal Event Listeners
+    // -------------------------------------------------------------
+    function setupFilters() {
+      // Magazine View Filters
+      const fAll = document.getElementById('mag-filter-all');
+      const fD1 = document.getElementById('mag-filter-day1');
+      const fD2 = document.getElementById('mag-filter-day2');
+      const magButtons = [fAll, fD1, fD2];
+
+      function setMagActive(activeBtn) {
+        magButtons.forEach(btn => {
+          btn.className = 'mag-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-600 hover:text-slate-900 border border-slate-200';
+        });
+        activeBtn.className = 'mag-tab px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white shadow-xs';
+      }
+
+      fAll.addEventListener('click', () => {
+        currentMagFilter = 'all';
+        setMagActive(fAll);
+        renderMagazineCards();
+      });
+      fD1.addEventListener('click', () => {
+        currentMagFilter = 1;
+        setMagActive(fD1);
+        renderMagazineCards();
+      });
+      fD2.addEventListener('click', () => {
+        currentMagFilter = 2;
+        setMagActive(fD2);
+        renderMagazineCards();
+      });
+
+      // Map View Tabs
+      const mAll = document.getElementById('map-tab-all');
+      const mD1 = document.getElementById('map-tab-day1');
+      const mD2 = document.getElementById('map-tab-day2');
+      const mapTabs = [mAll, mD1, mD2];
+
+      function setMapTabActive(btn) {
+        mapTabs.forEach(t => t.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900');
+        btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition bg-blue-600 text-white shadow-xs';
+      }
+
+      mAll.addEventListener('click', () => {
+        currentMapFilter = 'all';
+        setMapTabActive(mAll);
+        renderMapElements();
+      });
+      mD1.addEventListener('click', () => {
+        currentMapFilter = 1;
+        setMapTabActive(mD1);
+        renderMapElements();
+      });
+      mD2.addEventListener('click', () => {
+        currentMapFilter = 2;
+        setMapTabActive(mD2);
+        renderMapElements();
+      });
+
+      document.getElementById('btn-fit-map').addEventListener('click', () => {
+        if (!map) return;
+        const bounds = itineraryData.map(d => [d.lat, d.lng]);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      });
+
+      // Drawer toggle listeners
+      const btnToggleDrawer = document.getElementById('btn-toggle-drawer');
+      if (btnToggleDrawer) {
+        btnToggleDrawer.addEventListener('click', () => {
+          setDrawerState(!isDrawerOpen);
+        });
+      }
+
+      const btnQuickHide = document.getElementById('btn-drawer-quick-hide');
+      if (btnQuickHide) {
+        btnQuickHide.addEventListener('click', () => {
+          setDrawerState(false);
+        });
+      }
+
+      // Step tour navigation listeners
+      document.getElementById('btn-nav-prev').addEventListener('click', () => navigateStep(-1));
+      document.getElementById('btn-nav-next').addEventListener('click', () => navigateStep(1));
+
+      // Close modal buttons
+      document.getElementById('btn-close-spot-modal').addEventListener('click', closeModal);
+      document.getElementById('spot-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('spot-modal')) closeModal();
+      });
+
+      // Tips Modal
+      const tipsModal = document.getElementById('tips-modal');
+      document.getElementById('btn-open-tips').addEventListener('click', () => tipsModal.classList.remove('hidden'));
+      document.getElementById('btn-close-tips').addEventListener('click', () => tipsModal.classList.add('hidden'));
+      document.getElementById('btn-close-tips-bottom').addEventListener('click', () => tipsModal.classList.add('hidden'));
+      tipsModal.addEventListener('click', (e) => {
+        if (e.target === tipsModal) tipsModal.classList.add('hidden');
+      });
+
+      // Window resize listener
+      window.addEventListener('resize', () => {
+        if (map) map.invalidateSize();
+      });
+    }
+
+    // Initialize application
+    window.addEventListener('DOMContentLoaded', () => {
+      renderMagazineCards();
+      setupViewSwitching();
+      setupFilters();
+    });
+  </script>
+</body>
+</html>
